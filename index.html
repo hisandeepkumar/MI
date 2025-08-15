@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMF Live Tracking System</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #06121f;
+      color: #7fd3ff;
+    }
+    
+    #map-container {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      filter: saturate(1.1) contrast(1.1);
+    }
+    
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 1;
+    }
+    
+    /* HUD overlay: subtle grid + vignette */
+    .hud-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(transparent 40%, rgba(0,10,20,0.55) 80%),
+        repeating-linear-gradient(0deg, rgba(0,160,255,0.08), rgba(0,160,255,0.08) 1px, transparent 1px, transparent 32px),
+        repeating-linear-gradient(90deg, rgba(0,160,255,0.08), rgba(0,160,255,0.08) 1px, transparent 1px, transparent 32px);
+      mix-blend-mode: screen;
+      z-index: 2;
+    }
+    
+    /* Heads-up text badges (top-left) */
+    .hud-badge {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      pointer-events: none;
+      font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #7fd3ff;
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 8px rgba(0, 200, 255, 0.65);
+      opacity: 0.9;
+      background: rgba(6, 18, 31, 0.6);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 160, 255, 0.25);
+      z-index: 3;
+    }
+    
+    /* Pulsing agent marker container */
+    .agent-dot {
+      width: 24px;
+      height: 24px;
+      position: relative;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .agent-dot .core {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #00c8ff;
+      box-shadow: 0 0 12px rgba(0, 200, 255, 0.9), 0 0 24px rgba(0, 200, 255, 0.5);
+      z-index: 10;
+    }
+    
+    .agent-dot .pulse {
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 200, 255, 0.55);
+      animation: pulse 1.8s infinite;
+      z-index: 5;
+    }
+    
+    /* Live location marker */
+    .live-location {
+      width: 20px;
+      height: 20px;
+      position: relative;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .live-location .core {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #ff3a30;
+      box-shadow: 0 0 12px rgba(255, 58, 48, 0.9), 0 0 24px rgba(255, 58, 48, 0.5);
+      z-index: 10;
+    }
+    
+    .live-location .pulse {
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 58, 48, 0.55);
+      animation: pulse 2.2s infinite;
+      z-index: 5;
+    }
+    
+    @keyframes pulse {
+      0%   { transform: scale(0.75); opacity: 0.9; }
+      70%  { transform: scale(1.6);  opacity: 0.0; }
+      100% { transform: scale(1.6);  opacity: 0.0; }
+    }
+    
+    /* Route line styling */
+    .route-line {
+      stroke: #00b3ff;
+      stroke-width: 4;
+      stroke-opacity: 0.75;
+      stroke-dasharray: 10, 10;
+      fill: none;
+      filter: drop-shadow(0 0 4px rgba(0, 179, 255, 0.7));
+    }
+    
+    .route-glow {
+      stroke: #00b3ff;
+      stroke-width: 10;
+      stroke-opacity: 0.25;
+      fill: none;
+    }
+    
+    /* Minimal custom control (bottom-left) */
+    .ctrl {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      z-index: 3;
+      background: rgba(6, 18, 31, 0.85);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(0, 160, 255, 0.35);
+      box-shadow: 0 0 24px rgba(0, 160, 255, 0.25) inset, 0 0 16px rgba(0, 160, 255, 0.2);
+      border-radius: 10px;
+      padding: 12px 15px;
+      color: #bfeaff;
+      font: 500 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 300px;
+    }
+    
+    .ctrl button {
+      all: unset;
+      cursor: pointer;
+      padding: 8px 14px;
+      border: 1px solid rgba(0, 160, 255, 0.35);
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      flex: 1;
+      text-align: center;
+      min-width: 120px;
+    }
+    
+    .ctrl button:hover {
+      background: rgba(0, 160, 255, 0.1);
+      box-shadow: 0 0 8px rgba(0, 160, 255, 0.3);
+    }
+    
+    .ctrl button:active {
+      background: rgba(0, 160, 255, 0.2);
+    }
+    
+    /* Mission status panel */
+    .status-panel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 3;
+      background: rgba(6, 18, 31, 0.85);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(0, 160, 255, 0.35);
+      border-radius: 10px;
+      padding: 15px;
+      width: 220px;
+      box-shadow: 0 0 24px rgba(0, 160, 255, 0.15) inset, 0 0 16px rgba(0, 160, 255, 0.1);
+    }
+    
+    .status-panel h3 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #00c8ff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid rgba(0, 160, 255, 0.3);
+      padding-bottom: 8px;
+    }
+    
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    
+    .status-value {
+      color: #bfeaff;
+      font-weight: 500;
+    }
+    
+    /* Map attribution */
+    .leaflet-control-attribution {
+      background: rgba(6, 18, 31, 0.7) !important;
+      color: #7fd3ff !important;
+      font-size: 10px !important;
+      padding: 4px 8px !important;
+      border-radius: 4px !important;
+      border: 1px solid rgba(0, 160, 255, 0.2) !important;
+    }
+    
+    .leaflet-control-attribution a {
+      color: #00c8ff !important;
+    }
+    
+    /* Loading screen */
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #06121f;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(0, 200, 255, 0.2);
+      border-top: 4px solid #00c8ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .loading-text {
+      font-size: 14px;
+      color: #7fd3ff;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    
+    .signal-bars {
+      display: flex;
+      align-items: flex-end;
+      height: 20px;
+      gap: 3px;
+      margin-top: 15px;
+    }
+    
+    .bar {
+      width: 4px;
+      background: #00c8ff;
+      animation: bar-animation 1.5s infinite ease-in-out;
+    }
+    
+    .bar:nth-child(1) { height: 5px; animation-delay: 0s; }
+    .bar:nth-child(2) { height: 10px; animation-delay: 0.2s; }
+    .bar:nth-child(3) { height: 15px; animation-delay: 0.4s; }
+    .bar:nth-child(4) { height: 20px; animation-delay: 0.6s; }
+    
+    @keyframes bar-animation {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    
+    /* Fullscreen button */
+    .fullscreen-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 3;
+      width: 36px;
+      height: 36px;
+      background: rgba(6, 18, 31, 0.85);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(0, 160, 255, 0.35);
+      box-shadow: 0 0 12px rgba(0, 160, 255, 0.25) inset, 0 0 8px rgba(0, 160, 255, 0.2);
+      border-radius: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .fullscreen-btn:hover {
+      background: rgba(0, 160, 255, 0.1);
+      box-shadow: 0 0 16px rgba(0, 160, 255, 0.3);
+    }
+    
+    .fullscreen-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: #7fd3ff;
+    }
+    
+    /* Location accuracy circle */
+    .accuracy-circle {
+      stroke: rgba(255, 58, 48, 0.3);
+      stroke-width: 2;
+      fill: rgba(255, 58, 48, 0.1);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">ACQUIRING LOCATION SIGNAL</div>
+    <div class="signal-bars">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+  </div>
+  
+  <div id="map-container">
+    <div id="map"></div>
+    <div class="hud-overlay"></div>
+    <div class="hud-badge">
+      IMF TRACK // LIVE FEED<br>
+      STATUS: ACTIVE · ENCRYPTION AES-256
+    </div>
+    
+    <div class="status-panel">
+      <h3>AGENT STATUS</h3>
+      <div class="status-item">
+        <span>IDENTITY:</span>
+        <span class="status-value">OPERATIVE DELTA</span>
+      </div>
+      <div class="status-item">
+        <span>LOCATION:</span>
+        <span class="status-value" id="locationInfo">ACQUIRING...</span>
+      </div>
+      <div class="status-item">
+        <span>SPEED:</span>
+        <span class="status-value">0 KM/H</span>
+      </div>
+      <div class="status-item">
+        <span>DESTINATION:</span>
+        <span class="status-value">TARGET ALPHA</span>
+      </div>
+      <div class="status-item">
+        <span>ETA:</span>
+        <span class="status-value">00:18:32</span>
+      </div>
+    </div>
+    
+    <div class="ctrl">
+      <button id="locateBtn">LOCATE AGENT</button>
+      <button id="routeBtn">ANIMATE ROUTE</button>
+      <button id="nightBtn">NIGHT VISION</button>
+    </div>
+    
+    <div class="fullscreen-btn" id="fullscreenBtn" title="Toggle Fullscreen">
+      <svg viewBox="0 0 24 24">
+        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+      </svg>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Global variables
+    let map, agentMarker, liveLocationMarker, routePolyline, routeGlow, routePath;
+    let locationAccuracyCircle;
+    let nightVision = false;
+    let userPosition = null;
+    
+    // Wait for page to load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize the map after a short delay to show loading screen
+      setTimeout(initMap, 1500);
+      
+      // Set up fullscreen button
+      document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+    });
+    
+    // Initialize the map
+    function initMap() {
+      // Get user location first
+      getUserLocation();
+    }
+    
+    // Get user location
+    function getUserLocation() {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            // Successfully got location
+            userPosition = [position.coords.latitude, position.coords.longitude];
+            createMap();
+          },
+          function(error) {
+            // Error getting location - use default
+            console.error("Error getting location:", error);
+            userPosition = [28.6139, 77.2090]; // Default to New Delhi
+            createMap();
+          },
+          { 
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+          }
+        );
+      } else {
+        // Geolocation not supported
+        userPosition = [28.6139, 77.2090]; // Default to New Delhi
+        createMap();
+      }
+    }
+    
+    // Create map once we have location
+    function createMap() {
+      // Hide loading screen
+      document.getElementById('loading-screen').style.opacity = '0';
+      setTimeout(() => {
+        document.getElementById('loading-screen').style.display = 'none';
+      }, 500);
+      
+      // Create map
+      map = L.map('map', {
+        center: userPosition,
+        zoom: 16,
+        zoomControl: false,
+        attributionControl: true,
+        preferCanvas: true
+      });
+      
+      // Add dark tile layer
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
+      }).addTo(map);
+      
+      // Add zoom controls
+      L.control.zoom({
+        position: 'bottomright'
+      }).addTo(map);
+      
+      // Create agent marker
+      createAgentMarker(userPosition);
+      
+      // Create live location marker
+      createLiveLocationMarker(userPosition);
+      
+      // Create route
+      createRoute();
+      
+      // Update location info
+      updateLocationInfo(userPosition[0], userPosition[1]);
+      
+      // Set up event listeners
+      document.getElementById('locateBtn').addEventListener('click', locateAgent);
+      document.getElementById('routeBtn').addEventListener('click', animateRoute);
+      document.getElementById('nightBtn').addEventListener('click', toggleNightVision);
+      
+      // Add subtle movement to agent
+      setInterval(moveAgent, 2000);
+      
+      // Start route animation
+      animateRoute();
+      
+      // Watch position for updates
+      if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+          function(position) {
+            const newPos = [position.coords.latitude, position.coords.longitude];
+            updateLiveLocation(newPos, position.coords.accuracy);
+          },
+          function(error) {
+            console.error("Error updating location:", error);
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 10000,
+            timeout: 5000
+          }
+        );
+      }
+    }
+    
+    // Create the agent marker
+    function createAgentMarker(position) {
+      // Create marker element
+      const markerElement = document.createElement('div');
+      markerElement.className = 'agent-dot';
+      markerElement.innerHTML = '<div class="core"></div><div class="pulse"></div>';
+      
+      // Create Leaflet marker
+      agentMarker = L.marker(position, {
+        icon: L.divIcon({
+          html: markerElement,
+          className: '',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        })
+      }).addTo(map);
+    }
+    
+    // Create live location marker
+    function createLiveLocationMarker(position) {
+      // Create marker element
+      const markerElement = document.createElement('div');
+      markerElement.className = 'live-location';
+      markerElement.innerHTML = '<div class="core"></div><div class="pulse"></div>';
+      
+      // Create Leaflet marker
+      liveLocationMarker = L.marker(position, {
+        icon: L.divIcon({
+          html: markerElement,
+          className: '',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        })
+      }).addTo(map);
+      
+      // Add accuracy circle
+      locationAccuracyCircle = L.circle(position, {
+        radius: 20, // Will be updated with real accuracy
+        className: 'accuracy-circle'
+      }).addTo(map);
+    }
+    
+    // Update live location
+    function updateLiveLocation(position, accuracy) {
+      // Update marker position
+      liveLocationMarker.setLatLng(position);
+      
+      // Update accuracy circle
+      locationAccuracyCircle.setLatLng(position);
+      locationAccuracyCircle.setRadius(accuracy);
+      
+      // Update location info
+      updateLocationInfo(position[0], position[1]);
+    }
+    
+    // Update location information display
+    function updateLocationInfo(lat, lng) {
+      const latDir = lat >= 0 ? 'N' : 'S';
+      const lngDir = lng >= 0 ? 'E' : 'W';
+      const latStr = Math.abs(lat).toFixed(4);
+      const lngStr = Math.abs(lng).toFixed(4);
+      
+      document.getElementById('locationInfo').textContent = 
+        `${latStr}°${latDir}, ${lngStr}°${lngDir}`;
+    }
+    
+    // Create the route
+    function createRoute() {
+      // Create a sample route from user position to a nearby point
+      const endLat = userPosition[0] + (Math.random() * 0.01 - 0.005);
+      const endLng = userPosition[1] + (Math.random() * 0.01 - 0.005);
+      
+      routePath = [
+        userPosition,
+        [userPosition[0] + 0.002, userPosition[1] + 0.002],
+        [userPosition[0] + 0.004, userPosition[1] + 0.004],
+        [endLat, endLng]
+      ];
+      
+      // Create the route line with glow effect
+      routeGlow = L.polyline(routePath, {
+        color: '#00b3ff',
+        weight: 10,
+        opacity: 0.25,
+        className: 'route-glow'
+      }).addTo(map);
+      
+      // Create the main route line
+      routePolyline = L.polyline(routePath, {
+        color: '#00b3ff',
+        weight: 4,
+        opacity: 0.75,
+        dashArray: '10, 10',
+        className: 'route-line'
+      }).addTo(map);
+    }
+    
+    // Move agent along the route
+    function moveAgent() {
+      if (!agentMarker) return;
+      
+      // Move agent slightly
+      const currentPos = agentMarker.getLatLng();
+      const newLat = currentPos.lat + (Math.random() * 0.0001 - 0.00005);
+      const newLng = currentPos.lng + (Math.random() * 0.0001 - 0.00005);
+      agentMarker.setLatLng([newLat, newLng]);
+    }
+    
+    // Locate agent on map
+    function locateAgent() {
+      if (liveLocationMarker) {
+        map.panTo(liveLocationMarker.getLatLng());
+        map.setZoom(18);
+      }
+    }
+    
+    // Animate the route
+    function animateRoute() {
+      let offset = 0;
+      
+      // Reset any existing animation
+      if (window.routeAnimation) {
+        clearInterval(window.routeAnimation);
+      }
+      
+      // Start new animation
+      window.routeAnimation = setInterval(() => {
+        offset = (offset + 1) % 20;
+        routePolyline.setStyle({ dashOffset: `${offset}px` });
+      }, 50);
+    }
+    
+    // Toggle night vision mode
+    function toggleNightVision() {
+      nightVision = !nightVision;
+      const body = document.body;
+      
+      if (nightVision) {
+        body.classList.add('night-vision');
+        body.style.filter = 'sepia(1) hue-rotate(70deg) saturate(4) brightness(0.8) contrast(1.2)';
+      } else {
+        body.classList.remove('night-vision');
+        body.style.filter = '';
+      }
+    }
+    
+    // Toggle fullscreen mode
+    function toggleFullscreen() {
+      const elem = document.getElementById('map-container');
+      
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) {
+          elem.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      }
+    }
+  </script>
+</body>
+</html>
