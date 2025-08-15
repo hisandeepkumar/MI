@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IMF Live Tracking System</title>
+  <title>IMF Advanced Tracking System</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     * {
       margin: 0;
@@ -12,11 +13,19 @@
       box-sizing: border-box;
     }
     
+    :root {
+      --primary: #00c8ff;
+      --secondary: #ff3a30;
+      --dark: #06121f;
+      --darker: #040c16;
+      --panel: rgba(6, 18, 31, 0.85);
+    }
+    
     html, body {
       height: 100%;
       overflow: hidden;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #06121f;
+      background: var(--dark);
       color: #7fd3ff;
     }
     
@@ -25,12 +34,19 @@
       height: 100%;
       width: 100%;
       filter: saturate(1.1) contrast(1.1);
+      perspective: 1000px;
+      transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    }
+    
+    #map-container.three-d {
+      transform: rotateX(15deg) rotateY(-5deg) scale(0.95);
     }
     
     #map {
       height: 100%;
       width: 100%;
       z-index: 1;
+      transition: all 0.8s ease;
     }
     
     /* HUD overlay: subtle grid + vignette */
@@ -77,7 +93,7 @@
       position: absolute;
       inset: 0;
       border-radius: 50%;
-      background: #00c8ff;
+      background: var(--primary);
       box-shadow: 0 0 12px rgba(0, 200, 255, 0.9), 0 0 24px rgba(0, 200, 255, 0.5);
       z-index: 10;
     }
@@ -104,7 +120,7 @@
       position: absolute;
       inset: 0;
       border-radius: 50%;
-      background: #ff3a30;
+      background: var(--secondary);
       box-shadow: 0 0 12px rgba(255, 58, 48, 0.9), 0 0 24px rgba(255, 58, 48, 0.5);
       z-index: 10;
     }
@@ -126,7 +142,7 @@
     
     /* Route line styling */
     .route-line {
-      stroke: #00b3ff;
+      stroke: var(--primary);
       stroke-width: 4;
       stroke-opacity: 0.75;
       stroke-dasharray: 10, 10;
@@ -135,7 +151,7 @@
     }
     
     .route-glow {
-      stroke: #00b3ff;
+      stroke: var(--primary);
       stroke-width: 10;
       stroke-opacity: 0.25;
       fill: none;
@@ -147,7 +163,7 @@
       left: 16px;
       bottom: 16px;
       z-index: 3;
-      background: rgba(6, 18, 31, 0.85);
+      background: var(--panel);
       backdrop-filter: blur(6px);
       border: 1px solid rgba(0, 160, 255, 0.35);
       box-shadow: 0 0 24px rgba(0, 160, 255, 0.25) inset, 0 0 16px rgba(0, 160, 255, 0.2);
@@ -188,7 +204,7 @@
       top: 16px;
       right: 16px;
       z-index: 3;
-      background: rgba(6, 18, 31, 0.85);
+      background: var(--panel);
       backdrop-filter: blur(6px);
       border: 1px solid rgba(0, 160, 255, 0.35);
       border-radius: 10px;
@@ -200,7 +216,7 @@
     .status-panel h3 {
       font-size: 14px;
       margin-bottom: 12px;
-      color: #00c8ff;
+      color: var(--primary);
       text-transform: uppercase;
       letter-spacing: 1px;
       border-bottom: 1px solid rgba(0, 160, 255, 0.3);
@@ -230,7 +246,7 @@
     }
     
     .leaflet-control-attribution a {
-      color: #00c8ff !important;
+      color: var(--primary) !important;
     }
     
     /* Loading screen */
@@ -240,7 +256,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: #06121f;
+      background: var(--dark);
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -253,7 +269,7 @@
       width: 50px;
       height: 50px;
       border: 4px solid rgba(0, 200, 255, 0.2);
-      border-top: 4px solid #00c8ff;
+      border-top: 4px solid var(--primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin-bottom: 20px;
@@ -281,7 +297,7 @@
     
     .bar {
       width: 4px;
-      background: #00c8ff;
+      background: var(--primary);
       animation: bar-animation 1.5s infinite ease-in-out;
     }
     
@@ -295,19 +311,24 @@
       50% { opacity: 1; }
     }
     
-    /* Fullscreen button */
-    .fullscreen-btn {
+    /* Top controls */
+    .top-controls {
       position: absolute;
       top: 16px;
       right: 16px;
       z-index: 3;
-      width: 36px;
-      height: 36px;
-      background: rgba(6, 18, 31, 0.85);
+      display: flex;
+      gap: 10px;
+    }
+    
+    .control-btn {
+      width: 40px;
+      height: 40px;
+      background: var(--panel);
       backdrop-filter: blur(6px);
       border: 1px solid rgba(0, 160, 255, 0.35);
       box-shadow: 0 0 12px rgba(0, 160, 255, 0.25) inset, 0 0 8px rgba(0, 160, 255, 0.2);
-      border-radius: 8px;
+      border-radius: 50%;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -315,15 +336,15 @@
       transition: all 0.3s ease;
     }
     
-    .fullscreen-btn:hover {
+    .control-btn:hover {
       background: rgba(0, 160, 255, 0.1);
       box-shadow: 0 0 16px rgba(0, 160, 255, 0.3);
+      transform: scale(1.1);
     }
     
-    .fullscreen-btn svg {
-      width: 18px;
-      height: 18px;
-      fill: #7fd3ff;
+    .control-btn i {
+      font-size: 18px;
+      color: var(--primary);
     }
     
     /* Location accuracy circle */
@@ -333,12 +354,159 @@
       fill: rgba(255, 58, 48, 0.1);
       pointer-events: none;
     }
+    
+    /* Sci-Fi Keyboard */
+    .keyboard-container {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--darker);
+      border-top: 2px solid var(--primary);
+      box-shadow: 0 -5px 30px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+      transform: translateY(100%);
+      transition: transform 0.4s ease;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .keyboard-container.active {
+      transform: translateY(0);
+    }
+    
+    .search-container {
+      width: 100%;
+      max-width: 600px;
+      position: relative;
+    }
+    
+    #searchInput {
+      width: 100%;
+      padding: 15px 20px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid var(--primary);
+      border-radius: 50px;
+      color: white;
+      font-size: 16px;
+      letter-spacing: 1px;
+      box-shadow: 0 0 20px rgba(0, 200, 255, 0.3);
+    }
+    
+    #searchInput::placeholder {
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .keyboard-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 8px;
+      max-width: 600px;
+    }
+    
+    .key {
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid var(--primary);
+      border-radius: 5px;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+    
+    .key:hover {
+      background: rgba(0, 100, 255, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    .key:active {
+      background: rgba(0, 150, 255, 0.5);
+      transform: translateY(0);
+    }
+    
+    .key.special {
+      background: rgba(0, 100, 150, 0.6);
+    }
+    
+    .key.space {
+      grid-column: span 4;
+    }
+    
+    .key.enter {
+      grid-column: span 2;
+      background: rgba(0, 180, 100, 0.6);
+    }
+    
+    .key.backspace {
+      grid-column: span 2;
+      background: rgba(180, 50, 50, 0.6);
+    }
+    
+    /* 3D Effect */
+    .three-d-effect {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 200px;
+      height: 200px;
+      background: linear-gradient(45deg, rgba(0,200,255,0.1), rgba(0,200,255,0.05));
+      border-radius: 50%;
+      filter: blur(20px);
+      z-index: 0;
+      pointer-events: none;
+    }
+    
+    /* Location marker */
+    .destination-marker {
+      width: 16px;
+      height: 16px;
+      position: relative;
+      transform: translate(-50%, -50%);
+    }
+    
+    .destination-marker .outer {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(255, 215, 0, 0.3);
+      animation: pulse-gold 2s infinite;
+    }
+    
+    .destination-marker .inner {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: gold;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+    }
+    
+    @keyframes pulse-gold {
+      0% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.5); opacity: 0.3; }
+      100% { transform: scale(1); opacity: 0.7; }
+    }
+    
+    /* Route animation */
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -100;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="loading-screen">
     <div class="loading-spinner"></div>
-    <div class="loading-text">ACQUIRING LOCATION SIGNAL</div>
+    <div class="loading-text">INITIALIZING TRACKING SYSTEM</div>
     <div class="signal-bars">
       <div class="bar"></div>
       <div class="bar"></div>
@@ -355,11 +523,13 @@
       STATUS: ACTIVE · ENCRYPTION AES-256
     </div>
     
+    <div class="three-d-effect"></div>
+    
     <div class="status-panel">
       <h3>AGENT STATUS</h3>
       <div class="status-item">
         <span>IDENTITY:</span>
-        <span class="status-value">OPERATIVE DELTA</span>
+        <span class="status-value">OPERATIVE PHOENIX</span>
       </div>
       <div class="status-item">
         <span>LOCATION:</span>
@@ -367,28 +537,87 @@
       </div>
       <div class="status-item">
         <span>SPEED:</span>
-        <span class="status-value">0 KM/H</span>
+        <span class="status-value" id="speedInfo">0 KM/H</span>
       </div>
       <div class="status-item">
         <span>DESTINATION:</span>
-        <span class="status-value">TARGET ALPHA</span>
+        <span class="status-value" id="destinationInfo">-</span>
       </div>
       <div class="status-item">
-        <span>ETA:</span>
-        <span class="status-value">00:18:32</span>
+        <span>DISTANCE:</span>
+        <span class="status-value" id="distanceInfo">-</span>
       </div>
     </div>
     
     <div class="ctrl">
-      <button id="locateBtn">LOCATE AGENT</button>
-      <button id="routeBtn">ANIMATE ROUTE</button>
-      <button id="nightBtn">NIGHT VISION</button>
+      <button id="locateBtn"><i class="fas fa-crosshairs"></i> LOCATE AGENT</button>
+      <button id="routeBtn"><i class="fas fa-route"></i> ANIMATE ROUTE</button>
+      <button id="nightBtn"><i class="fas fa-moon"></i> NIGHT VISION</button>
     </div>
     
-    <div class="fullscreen-btn" id="fullscreenBtn" title="Toggle Fullscreen">
-      <svg viewBox="0 0 24 24">
-        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-      </svg>
+    <div class="top-controls">
+      <div class="control-btn" id="fullscreenBtn" title="Toggle Fullscreen">
+        <i class="fas fa-expand"></i>
+      </div>
+      <div class="control-btn" id="searchBtn" title="Search Location">
+        <i class="fas fa-search"></i>
+      </div>
+      <div class="control-btn" id="threeDBtn" title="Toggle 3D View">
+        <i class="fas fa-cube"></i>
+      </div>
+    </div>
+    
+    <div class="keyboard-container" id="keyboard">
+      <div class="search-container">
+        <input type="text" id="searchInput" placeholder="ENTER DESTINATION COORDINATES OR LOCATION NAME...">
+      </div>
+      <div class="keyboard-grid">
+        <div class="key" data-key="1">1</div>
+        <div class="key" data-key="2">2</div>
+        <div class="key" data-key="3">3</div>
+        <div class="key" data-key="4">4</div>
+        <div class="key" data-key="5">5</div>
+        <div class="key" data-key="6">6</div>
+        <div class="key" data-key="7">7</div>
+        <div class="key" data-key="8">8</div>
+        <div class="key" data-key="9">9</div>
+        <div class="key" data-key="0">0</div>
+        
+        <div class="key" data-key="q">Q</div>
+        <div class="key" data-key="w">W</div>
+        <div class="key" data-key="e">E</div>
+        <div class="key" data-key="r">R</div>
+        <div class="key" data-key="t">T</div>
+        <div class="key" data-key="y">Y</div>
+        <div class="key" data-key="u">U</div>
+        <div class="key" data-key="i">I</div>
+        <div class="key" data-key="o">O</div>
+        <div class="key" data-key="p">P</div>
+        
+        <div class="key" data-key="a">A</div>
+        <div class="key" data-key="s">S</div>
+        <div class="key" data-key="d">D</div>
+        <div class="key" data-key="f">F</div>
+        <div class="key" data-key="g">G</div>
+        <div class="key" data-key="h">H</div>
+        <div class="key" data-key="j">J</div>
+        <div class="key" data-key="k">K</div>
+        <div class="key" data-key="l">L</div>
+        <div class="key backspace" data-key="backspace"><i class="fas fa-backspace"></i></div>
+        
+        <div class="key" data-key="z">Z</div>
+        <div class="key" data-key="x">X</div>
+        <div class="key" data-key="c">C</div>
+        <div class="key" data-key="v">V</div>
+        <div class="key" data-key="b">B</div>
+        <div class="key" data-key="n">N</div>
+        <div class="key" data-key="m">M</div>
+        <div class="key" data-key=",">,</div>
+        <div class="key" data-key=".">.</div>
+        <div class="key enter" data-key="enter">ENTER</div>
+        
+        <div class="key space" data-key=" ">SPACE</div>
+      </div>
     </div>
   </div>
 
@@ -396,17 +625,38 @@
   <script>
     // Global variables
     let map, agentMarker, liveLocationMarker, routePolyline, routeGlow, routePath;
-    let locationAccuracyCircle;
+    let locationAccuracyCircle, destinationMarker;
     let nightVision = false;
     let userPosition = null;
+    let watchId = null;
+    let destination = null;
+    let previousPosition = null;
+    let threeDEnabled = false;
+    
+    // Keyboard keys
+    const keyboardKeys = [
+      '1','2','3','4','5','6','7','8','9','0',
+      'q','w','e','r','t','y','u','i','o','p',
+      'a','s','d','f','g','h','j','k','l','backspace',
+      'z','x','c','v','b','n','m',',','.','enter',
+      ' '
+    ];
     
     // Wait for page to load
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize the map after a short delay to show loading screen
       setTimeout(initMap, 1500);
       
-      // Set up fullscreen button
+      // Set up control buttons
       document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+      document.getElementById('searchBtn').addEventListener('click', toggleKeyboard);
+      document.getElementById('threeDBtn').addEventListener('click', toggle3D);
+      document.getElementById('locateBtn').addEventListener('click', locateAgent);
+      document.getElementById('routeBtn').addEventListener('click', animateRoute);
+      document.getElementById('nightBtn').addEventListener('click', toggleNightVision);
+      
+      // Set up keyboard events
+      setupKeyboard();
     });
     
     // Initialize the map
@@ -477,40 +727,11 @@
       // Create live location marker
       createLiveLocationMarker(userPosition);
       
-      // Create route
-      createRoute();
-      
       // Update location info
       updateLocationInfo(userPosition[0], userPosition[1]);
       
-      // Set up event listeners
-      document.getElementById('locateBtn').addEventListener('click', locateAgent);
-      document.getElementById('routeBtn').addEventListener('click', animateRoute);
-      document.getElementById('nightBtn').addEventListener('click', toggleNightVision);
-      
-      // Add subtle movement to agent
-      setInterval(moveAgent, 2000);
-      
-      // Start route animation
-      animateRoute();
-      
-      // Watch position for updates
-      if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(
-          function(position) {
-            const newPos = [position.coords.latitude, position.coords.longitude];
-            updateLiveLocation(newPos, position.coords.accuracy);
-          },
-          function(error) {
-            console.error("Error updating location:", error);
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 10000,
-            timeout: 5000
-          }
-        );
-      }
+      // Start watching position for updates
+      startLocationTracking();
     }
     
     // Create the agent marker
@@ -555,8 +776,33 @@
       }).addTo(map);
     }
     
+    // Start location tracking
+    function startLocationTracking() {
+      if (watchId) {
+        // Already watching
+        return;
+      }
+      
+      if ("geolocation" in navigator) {
+        watchId = navigator.geolocation.watchPosition(
+          function(position) {
+            const newPos = [position.coords.latitude, position.coords.longitude];
+            updateLiveLocation(newPos, position.coords.accuracy, position.coords.speed);
+          },
+          function(error) {
+            console.error("Error updating location:", error);
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 5000
+          }
+        );
+      }
+    }
+    
     // Update live location
-    function updateLiveLocation(position, accuracy) {
+    function updateLiveLocation(position, accuracy, speed) {
       // Update marker position
       liveLocationMarker.setLatLng(position);
       
@@ -566,30 +812,59 @@
       
       // Update location info
       updateLocationInfo(position[0], position[1]);
+      
+      // Calculate and display speed
+      let speedKmh = 0;
+      if (speed !== null && !isNaN(speed)) {
+        speedKmh = Math.round(speed * 3.6); // Convert m/s to km/h
+      }
+      document.getElementById('speedInfo').textContent = `${speedKmh} KM/H`;
+      
+      // Move agent marker slightly to simulate movement
+      if (previousPosition) {
+        const dx = position[0] - previousPosition[0];
+        const dy = position[1] - previousPosition[1];
+        const agentPos = agentMarker.getLatLng();
+        agentMarker.setLatLng([agentPos.lat + dx/10, agentPos.lng + dy/10]);
+      }
+      
+      previousPosition = position;
+      
+      // If we have a destination, update the route
+      if (destination) {
+        updateRoute(position, destination);
+      }
     }
     
     // Update location information display
     function updateLocationInfo(lat, lng) {
       const latDir = lat >= 0 ? 'N' : 'S';
       const lngDir = lng >= 0 ? 'E' : 'W';
-      const latStr = Math.abs(lat).toFixed(4);
-      const lngStr = Math.abs(lng).toFixed(4);
+      const latStr = Math.abs(lat).toFixed(6);
+      const lngStr = Math.abs(lng).toFixed(6);
       
       document.getElementById('locationInfo').textContent = 
         `${latStr}°${latDir}, ${lngStr}°${lngDir}`;
     }
     
-    // Create the route
-    function createRoute() {
-      // Create a sample route from user position to a nearby point
-      const endLat = userPosition[0] + (Math.random() * 0.01 - 0.005);
-      const endLng = userPosition[1] + (Math.random() * 0.01 - 0.005);
+    // Create a route to destination
+    function createRoute(dest) {
+      // Clear any existing route
+      if (routePolyline) {
+        map.removeLayer(routePolyline);
+      }
+      if (routeGlow) {
+        map.removeLayer(routeGlow);
+      }
       
+      // Create a sample route from user position to destination
       routePath = [
-        userPosition,
-        [userPosition[0] + 0.002, userPosition[1] + 0.002],
-        [userPosition[0] + 0.004, userPosition[1] + 0.004],
-        [endLat, endLng]
+        liveLocationMarker.getLatLng(),
+        [liveLocationMarker.getLatLng().lat + (dest[0] - liveLocationMarker.getLatLng().lat) * 0.3, 
+         liveLocationMarker.getLatLng().lng + (dest[1] - liveLocationMarker.getLatLng().lng) * 0.3],
+        [liveLocationMarker.getLatLng().lat + (dest[0] - liveLocationMarker.getLatLng().lat) * 0.7, 
+         liveLocationMarker.getLatLng().lng + (dest[1] - liveLocationMarker.getLatLng().lng) * 0.7],
+        dest
       ];
       
       // Create the route line with glow effect
@@ -608,6 +883,85 @@
         dashArray: '10, 10',
         className: 'route-line'
       }).addTo(map);
+      
+      // Create destination marker
+      if (destinationMarker) {
+        map.removeLayer(destinationMarker);
+      }
+      
+      const markerElement = document.createElement('div');
+      markerElement.className = 'destination-marker';
+      markerElement.innerHTML = '<div class="outer"></div><div class="inner"></div>';
+      
+      destinationMarker = L.marker(dest, {
+        icon: L.divIcon({
+          html: markerElement,
+          className: '',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        })
+      }).addTo(map);
+      
+      // Calculate distance
+      const distance = calculateDistance(
+        liveLocationMarker.getLatLng().lat,
+        liveLocationMarker.getLatLng().lng,
+        dest[0],
+        dest[1]
+      );
+      
+      document.getElementById('distanceInfo').textContent = `${distance.toFixed(2)} KM`;
+      document.getElementById('destinationInfo').textContent = "TARGET";
+      
+      // Start route animation
+      animateRoute();
+    }
+    
+    // Update route when location changes
+    function updateRoute(from, to) {
+      if (!routePolyline || !routeGlow) return;
+      
+      // Update route path
+      routePath = [
+        from,
+        [from[0] + (to[0] - from[0]) * 0.3, from[1] + (to[1] - from[1]) * 0.3],
+        [from[0] + (to[0] - from[0]) * 0.7, from[1] + (to[1] - from[1]) * 0.7],
+        to
+      ];
+      
+      routePolyline.setLatLngs(routePath);
+      routeGlow.setLatLngs(routePath);
+      
+      // Update destination marker
+      destinationMarker.setLatLng(to);
+      
+      // Calculate distance
+      const distance = calculateDistance(
+        from[0],
+        from[1],
+        to[0],
+        to[1]
+      );
+      
+      document.getElementById('distanceInfo').textContent = `${distance.toFixed(2)} KM`;
+    }
+    
+    // Calculate distance between two points
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Radius of the earth in km
+      const dLat = deg2rad(lat2 - lat1);
+      const dLon = deg2rad(lon2 - lon1);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      const d = R * c; // Distance in km
+      return d;
+    }
+    
+    function deg2rad(deg) {
+      return deg * (Math.PI/180);
     }
     
     // Move agent along the route
@@ -631,6 +985,8 @@
     
     // Animate the route
     function animateRoute() {
+      if (!routePolyline) return;
+      
       let offset = 0;
       
       // Reset any existing animation
@@ -680,6 +1036,90 @@
           document.msExitFullscreen();
         }
       }
+    }
+    
+    // Toggle 3D mode
+    function toggle3D() {
+      threeDEnabled = !threeDEnabled;
+      const mapContainer = document.getElementById('map-container');
+      
+      if (threeDEnabled) {
+        mapContainer.classList.add('three-d');
+      } else {
+        mapContainer.classList.remove('three-d');
+      }
+    }
+    
+    // Toggle keyboard
+    function toggleKeyboard() {
+      const keyboard = document.getElementById('keyboard');
+      keyboard.classList.toggle('active');
+      
+      if (keyboard.classList.contains('active')) {
+        document.getElementById('searchInput').focus();
+      }
+    }
+    
+    // Setup keyboard
+    function setupKeyboard() {
+      const keyboard = document.getElementById('keyboard');
+      const searchInput = document.getElementById('searchInput');
+      
+      // Add event listeners to all keys
+      document.querySelectorAll('.key').forEach(key => {
+        key.addEventListener('click', function() {
+          const keyValue = this.getAttribute('data-key');
+          
+          if (keyValue === 'backspace') {
+            searchInput.value = searchInput.value.slice(0, -1);
+          } else if (keyValue === 'enter') {
+            searchLocation(searchInput.value);
+            keyboard.classList.remove('active');
+          } else if (keyValue === ' ') {
+            searchInput.value += ' ';
+          } else {
+            searchInput.value += keyValue;
+          }
+        });
+      });
+      
+      // Close keyboard when clicking outside
+      document.addEventListener('click', function(e) {
+        if (!keyboard.contains(e.target) {
+          keyboard.classList.remove('active');
+        }
+      });
+    }
+    
+    // Search for a location
+    function searchLocation(query) {
+      if (!query) return;
+      
+      // Simple coordinate parsing (for demo)
+      const coordMatch = query.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lng = parseFloat(coordMatch[2]);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+          destination = [lat, lng];
+          createRoute(destination);
+          map.setView(destination, 14);
+          return;
+        }
+      }
+      
+      // For real implementation, you would use a geocoding service like Nominatim
+      // This is a simplified version for demo purposes
+      document.getElementById('destinationInfo').textContent = query.toUpperCase();
+      destination = [
+        liveLocationMarker.getLatLng().lat + (Math.random() * 0.02 - 0.01),
+        liveLocationMarker.getLatLng().lng + (Math.random() * 0.02 - 0.01)
+      ];
+      
+      createRoute(destination);
+      map.setView(destination, 14);
     }
   </script>
 </body>
